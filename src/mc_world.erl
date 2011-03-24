@@ -56,6 +56,7 @@ block_dig(State, X, Y, Z, Direction, _Client, ChunkStore) when State =:= 3 ->
     end.
 
 load_chunk(X, Y, Z, Root, ChunkStore) ->
+    io:format("load_chunk: ~p ~p ~p~n", [X, Y, Z]),
     SizeX = 16, SizeY = 128, SizeZ = 16,
     [BlockData, MetaData, LightData] = try ets:member(ChunkStore, {X*16, Z*16}) of
         true -> load_chunk_ets(X, Y, Z, ChunkStore);
@@ -63,8 +64,9 @@ load_chunk(X, Y, Z, Root, ChunkStore) ->
         catch _:_ ->
             load_chunk_disk(X, Y, Z, Root, ChunkStore) 
     end,
-    Compressed = zlib:compress(<<BlockData/binary, MetaData/binary, MetaData/binary, LightData/binary>>),
-    mc_util:write_packet(16#33, lists:flatten([{int, X*16}, {short, Y}, {int, Z*16}, {byte, SizeX-1}, {byte, SizeY-1}, {byte, SizeZ-1}, {int, size(Compressed)}, {binary, Compressed}])).
+    %%Compressed = zlib:compress(<<BlockData/binary, MetaData/binary, MetaData/binary, LightData/binary>>),
+    %%mc_util:write_packet(16#33, lists:flatten([{int, X*16}, {short, Y}, {int, Z*16}, {byte, SizeX-1}, {byte, SizeY-1}, {byte, SizeZ-1}, {int, size(Compressed)}, {binary, Compressed}]))
+    io:format("Envoi paquet~n").
 
 
 load_chunk_ets(X, _Y, Z, ChunkStore) ->
@@ -79,20 +81,17 @@ load_chunk_ets(X, _Y, Z, ChunkStore) ->
         end, [<<>>, <<>>, <<>>], lists:seq(0, 255)).
 
 load_chunk_disk(X, _Y, Z, Root, ChunkStore) ->
-    F1 = string:to_lower(case X of
-        PosX when PosX >= 0 ->
-            erlang:integer_to_list(X rem 64, 36);
-        _ ->
-            erlang:integer_to_list((64+X) rem 64, 36)
-    end),
-    F2 = string:to_lower(case Z of
-        PosZ when PosZ >= 0 ->
-            erlang:integer_to_list(Z rem 64, 36);
-        _ ->
-            erlang:integer_to_list((64+Z) rem 64, 36)
-    end),
-    FileName = string:to_lower(string:join(["c", erlang:integer_to_list(X, 36), erlang:integer_to_list(Z, 36), "dat"], ".")),
-    Path = string:join([Root, F1, F2, FileName], "/"),
+    io:format("Load chunk : ~p ~p ~p~n", [X, Z, Root]),
+    CX = floor(X/32.0),
+    CZ = floor(Z/32.0),
+    FileName = string:to_lower(
+                         string:join([
+                                 "r", 
+                                 erlang:integer_to_list(CX), 
+                                 erlang:integer_to_list(CZ), 
+                                 "mcr"
+                         ], ".")),
+    Path = string:join([Root, "region", FileName], "/"),
     Data = nbt:load_file(Path),
     {tag_compound, <<"Level">>, LevelData} = Data,
     {tag_byte_array, <<"Blocks">>, Blocks} = lists:keyfind(<<"Blocks">>, 2, LevelData),
@@ -181,6 +180,7 @@ handle_call({get_chunk, X, Y, Z}, _From, #state{world_path = WorldPath, chunk_st
     {reply, {chunk, PreChunk, ChunkData}, State};
 
 handle_call({get_spawn}, _From, #state{world = World} = State) ->
+    io:format("get_spawn: ~p~n", [World]),
     {tag_compound, <<"Data">>, Data} = World,
     {SX, SY, SZ} = case lists:keyfind(<<"Player">>, 2, Data) of
         {tag_compound, <<"Player">>, PlayerInfo} ->
@@ -269,6 +269,13 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, _State, _Extra) ->
     {ok, _State}.
 
+floor(X) ->
+    T = erlang:trunc(X),
+    case (X - T) of
+        Neg when Neg < 0 -> T - 1;
+        Pos when Pos > 0 -> T;
+        _ -> T
+    end.
 %%
 %% Tests
 %%
