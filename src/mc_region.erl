@@ -49,8 +49,8 @@ load_chunks([{COffset, CSize, CTime}|CList], CData) ->
     io:format("Chunk Input : ~p ~p~n", [COffset, CSize]),
     % CData is the binary after the header
     Offset = COffset * 4096 - 8192,
-    DataSize = CSize * 512,
-    io:format("Chunk Seek : ~p ~p~n", [Offset+8192, DataSize*8]),
+    DataSize = CSize * 4096,
+    io:format("Chunk Seek : ~p ~p~n", [Offset+8192, DataSize]),
     <<
       _:Offset/binary,
       CLength:?DATA_LENGTH,
@@ -62,14 +62,23 @@ load_chunks([{COffset, CSize, CTime}|CList], CData) ->
 	2 -> zlib_read_chunk(ZippedData);
 	_ -> {error, enoimpl}
     end,
-    NBTData = nbt:parse_nbt(RawData),
-    io:format("~p~n", [NBTData]).
+%    io:format("Data : ~p~n", [RawData]),
+    file:write_file("/tmp/nbt.dat", RawData),
+    NBTData = nbt:parse_nbt_data(RawData).
+%    io:format("~p~n", [NBTData]).
 %    load_chunks(CList, CData).
 
 zlib_read_chunk(ZData) ->
     Z = zlib:open(),
     zlib:inflateInit(Z),
-    Data = zlib:inflate(Z, ZData),
+    Data0 = list_to_binary(zlib:inflate(Z, ZData)),
+    Size0 = size(Data0),
+    file:write_file("/tmp/chunk-0.dat", Data0),
+%    Data1 = list_to_binary(zlib:inflate(Z, ZData)),
+%    Size1 = size(Data1),
+%    file:write_file("/tmp/chunk-1.dat", Data1),
+%    Data2 = zlib:inflate(Z, ZData),
+%    Data3 = zlib:inflate(Z, ZData),
     zlib:close(Z),
-    io:format("~p~n", [list_to_binary(Data)]),
-    {ok, list_to_binary(Data)}.
+    {ok, Data0}.
+%    {ok, list_to_binary([Data0,Data1])}.
