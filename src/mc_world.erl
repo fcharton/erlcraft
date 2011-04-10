@@ -64,9 +64,9 @@ load_chunk(X, Y, Z, Root, ChunkStore) ->
         catch _:_ ->
             load_chunk_disk(X, Y, Z, Root, ChunkStore) 
     end,
-    %%Compressed = zlib:compress(<<BlockData/binary, MetaData/binary, MetaData/binary, LightData/binary>>),
-    %%mc_util:write_packet(16#33, lists:flatten([{int, X*16}, {short, Y}, {int, Z*16}, {byte, SizeX-1}, {byte, SizeY-1}, {byte, SizeZ-1}, {int, size(Compressed)}, {binary, Compressed}]))
-    io:format("Envoi paquet~n").
+    Compressed = zlib:compress(<<BlockData/binary, MetaData/binary, MetaData/binary, LightData/binary>>),
+    mc_util:write_packet(16#33, lists:flatten([{int, X*16}, {short, Y}, {int, Z*16}, {byte, SizeX-1}, {byte, SizeY-1}, {byte, SizeZ-1}, {int, size(Compressed)}, {binary, Compressed}])).
+    %%io:format("Envoi paquet~n").
 
 
 load_chunk_ets(X, _Y, Z, ChunkStore) ->
@@ -82,17 +82,7 @@ load_chunk_ets(X, _Y, Z, ChunkStore) ->
 
 load_chunk_disk(X, _Y, Z, Root, ChunkStore) ->
     io:format("Load chunk : ~p ~p ~p~n", [X, Z, Root]),
-    CX = floor(X/32.0),
-    CZ = floor(Z/32.0),
-    FileName = string:to_lower(
-                         string:join([
-                                 "r", 
-                                 erlang:integer_to_list(CX), 
-                                 erlang:integer_to_list(CZ), 
-                                 "mcr"
-                         ], ".")),
-    Path = string:join([Root, "region", FileName], "/"),
-    Data = nbt:load_file(Path),
+    Data = mc_region:load_chunk(Root, X, Z),
     {tag_compound, <<"Level">>, LevelData} = Data,
     {tag_byte_array, <<"Blocks">>, Blocks} = lists:keyfind(<<"Blocks">>, 2, LevelData),
     {tag_byte_array, <<"BlockLight">>, BlockLight} = lists:keyfind(<<"BlockLight">>, 2, LevelData),
@@ -269,14 +259,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, _State, _Extra) ->
     {ok, _State}.
 
-floor(X) ->
-    T = erlang:trunc(X),
-    case (X - T) of
-        Neg when Neg < 0 -> T - 1;
-        Pos when Pos > 0 -> T;
-        _ -> T
-    end.
-%%
 %% Tests
 %%
 -include_lib("eunit/include/eunit.hrl").
